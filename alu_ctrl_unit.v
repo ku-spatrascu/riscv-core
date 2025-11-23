@@ -18,7 +18,7 @@ module alu_ctrl_unit (
     localparam ALU_SLT  = 4'b1001;
 
     always @(*) begin
-
+        alu_ctrl_o = ALU_ADD;
         case (opcode_i)
             7'b0110011: begin
                 case (funct3_i)
