@@ -1,0 +1,30 @@
+# just in case it is needed 
+
+# --- Simulation Artifacts (Don't upload these!) ---
+*.vcd
+*.wlf
+*.fsdb
+*.log
+*.vpd
+*.trn
+
+# --- Compiled Executables ---
+a.out
+sim
+simv
+*.o
+*.hex
+
+# --- Tool Generated Directories ---
+work/
+transcript
+xsim.dir/
+csrc/
+
+# --- Mac OS System Files ---
+.DS_Store
+.DS_Store?
+
+# --- VS Code Settings (Optional) ---
+# Uncomment the line below if you don't want to share your personal editor settings
+# .vscode/
