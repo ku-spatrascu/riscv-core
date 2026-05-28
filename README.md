@@ -5,7 +5,7 @@ A 32-bit pipelined RISC-V processor written in Verilog. The core supports R/I/S/
 ## Project Highlights
 
 - 4-stage pipeline: instruction fetch, decode, execute/memory, writeback
-- 32 general-purpose registers with `x0` hardwired to zero
+- 32 general-purpose registers with x0 hardwired to zero
 - Supports R/I/S/B/U/J immediate formats
 - Implements hazard detection, data forwarding, branch flushing, and pipeline stalls
 - Runs an assembly bubble-sort test program
@@ -98,19 +98,6 @@ The design was synthesized and analyzed using an open-source ASIC flow:
 * OpenSTA for static timing analysis
 * Sky130 as the target technology library
 * Docker/XQuartz used for the tool environment
-
-## Repository Structure
-
-```text
-.
-├── src/              # Verilog source files
-├── tb/               # Testbenches
-├── asm/              # Assembly test programs
-├── sim/              # Simulation outputs and scripts
-└── README.md
-```
-
-Update this section to match your actual repository organization.
 
 ## Future Improvements
 
