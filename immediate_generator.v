@@ -8,6 +8,7 @@ module immediate_generator (
     output reg  signed [31:0] imm_o
 );
 
+// could clean this up, however this is the parameter given in assignment
 wire signed [31:0] instr = {funct7_i, rs2_i, rs1_i, funct3_i, rd_i, opcode_i}; 
 
 always @(*) begin

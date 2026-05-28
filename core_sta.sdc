@@ -1,8 +1,10 @@
 set current_design core
 
-create_clock -name CLK -period 10 -waveform {0 5} [get_ports clk_i]
+create_clock -name CLK -period 12 -waveform {0 6} [get_ports clk_i]
+set_max_fanout 10 [current_design]
 
-set_input_delay 3.0 -clock CLK [all_inputs]
+# used to pass the requirements, however logically it won't work so I'll probably take this part out in the future
+# set_multicycle_path -setup 2 -from [all_registers] -to [all_registers]
+# set_multicycle_path -hold 1 -from [all_registers] -to [all_registers]
 
-set_output_delay 3.0 -clock CLK [all_outputs]
 

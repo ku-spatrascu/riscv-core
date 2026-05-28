@@ -17,6 +17,10 @@ module alu_ctrl_unit (
     localparam ALU_SLTU = 4'b1000;
     localparam ALU_SLT  = 4'b1001;
 
+
+// TO DO: ADD ILLEGAL INSTRUCTION HANDLING -> turn to NOP
+
+
     always @(*) begin
         alu_ctrl_o = ALU_ADD;
         case (opcode_i)

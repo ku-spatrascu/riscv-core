@@ -28,7 +28,7 @@ module branch_unit (
 
         case (opcode_i)
             OP_BRANCH: begin
-                pc_branch_o = $signed(pc_i) + imm_i;
+                pc_branch_o = pc_i + imm_i;
                 case (funct3_i)
                     FUNCT3_BEQ: begin
                         if (alu_zero_i) branch_taken_o = 1'b1;
@@ -53,12 +53,13 @@ module branch_unit (
 
             OP_JAL: begin
                 branch_taken_o = 1'b1;
-                pc_branch_o = $signed(pc_i) + imm_i;
+                pc_branch_o = pc_i + imm_i;
             end
 
             OP_JALR: begin
                 branch_taken_o = 1'b1;
-                pc_branch_o = (rs1_dout_i + imm_i) & ~32'd1;
+                // possibly dont need this
+                pc_branch_o = (rs1_dout_i + imm_i) & ~32'd1; // keep lsb 0
             end
 
             default: begin

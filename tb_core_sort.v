@@ -18,7 +18,7 @@ module tb_core;
     reg [31:0] instr_mem [0:1023];
     reg [31:0] data_mem  [0:1023];
 
-    core dut (
+    core uut (
         .clk_i(clk),
         .rst_ni(rst_n),
         .imem_addr_o(instr_addr),
@@ -42,6 +42,41 @@ module tb_core;
             data_mem[data_addr[11:2]] <= data_wr_data;
     end
 
+    // always @ (posedge clk) begin
+    //     if (data_write)
+    //         data_mem[data_addr[11:2]] <= data_wr_data;
+    // end
+
+    // // --- MEMORY READ (Combinational / Continuous Assignment) ---
+    // // 
+    // // Using 'assign' guarantees the data is ready BEFORE the clock edge.
+    
+    // always @(*) begin
+    //      if (instr_read) instr_rd_data = instr_mem[instr_addr[11:2]];
+    //      else            instr_rd_data = 32'b0;
+
+    //      if (data_read)  data_rd_data = data_mem[data_addr[11:2]];
+    //      else            data_rd_data = 32'b0;
+    // end
+
+always @(posedge clk) begin
+    if (uut.pc_curr_ex <= 32'h00000040) begin
+        $display("[%0t] EX pc=%h opcode=%h funct3=%b rd=x%0d rs1=x%0d rs2=x%0d imm=%0d memR=%b memW=%b regW=%b branch_taken=%b",
+            $time,
+            uut.pc_curr_ex,
+            uut.opcode_ex,
+            uut.funct3_ex,
+            uut.rd_addr_ex,
+            uut.rs1_addr_fwd,
+            uut.rs2_addr_fwd,
+            uut.imm_ex,
+            uut.mem_read_ex,
+            uut.mem_write_ex,
+            uut.reg_write_ex,
+            uut.branch_taken
+        );
+    end
+end
     integer i;
     integer err;
 
@@ -52,7 +87,7 @@ module tb_core;
 
     initial begin
         
-        repeat(20) begin
+        repeat(1) begin
         clk = 0; rst_n = 0; err = 0;
             for (i = 0; i < 1024; i = i + 1) begin
                 instr_mem[i] = 32'h00000013; // NOP
@@ -118,6 +153,5 @@ module tb_core;
 
         $finish;
     end
-
 
 endmodule

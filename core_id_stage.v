@@ -9,6 +9,7 @@ module core_id_stage #(
     input wire signed [XLEN-1:0] rd_din_i,
     input wire [4:0] wb_rd_i,
     input wire wb_reg_write_i,
+    input wire mem_read_ex, 
     
     output wire [4:0] rs1_o,
     output wire [4:0] rs2_o,
@@ -27,13 +28,11 @@ module core_id_stage #(
 
     // hazard unit inputs/output: 
     input wire [4:0] rd_id_ex_i, 
-    input wire is_load_i, 
 
-    output wire is_load_pipeline_o,
     output wire stall_o
     
 );
-    // internal wiring for the hazard unit inputs rs1 and rs2
+    // change internal wiring for the hazard unit inputs rs1 and rs2 (redundant)
     wire [4:0] rs1_id;
     wire [4:0] rs2_id;
 
@@ -47,8 +46,6 @@ module core_id_stage #(
     assign rs1_o = instr_i[19:15];
     assign rs2_o = instr_i[24:20];
     assign funct7_o = instr_i[31:25];
-
-    assign is_load_pipeline_o = (opcode_o == 7'b0000011); // we pipeline this value instead of inputting it to the hazard unit, so we can use the previous instruction's result
 
     decoder deco (
        .opcode_i (opcode_o),
@@ -79,13 +76,12 @@ module core_id_stage #(
         .rs1_dout_o (rs1_dout_o),
         .rs2_dout_o (rs2_dout_o)
     );
-
+    // tighten up on unneccesary stallls, maybe stall for stores as well?
     hazard_unit haz_u (
         .rd_id_ex_i (rd_id_ex_i),
         .rs1_if_id_i (rs1_id),
         .rs2_if_id_i (rs2_id),
-
-        .is_load_i (is_load_i),
+        .mem_read_ex (mem_read_ex),
 
         .stall_o (stall_o)
     );

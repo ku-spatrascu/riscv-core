@@ -1,9 +1,6 @@
 `timescale 1ns / 1ps
 
 module alu (
-    input wire clk_i,
-    input wire rst_ni,
-    
     input  wire signed [31:0] in1_i,
     input  wire signed [31:0] in2_i,
     input  wire [3:0]         ctrl_i,
@@ -11,8 +8,10 @@ module alu (
     output reg                zero_o
 );
 
+
+ // TO DO: create ripple carry adder for add/sub operation due to timing requirments 
     always @(*) begin
-    
+    // for shift possibly lower 5 bits
         case (ctrl_i)
             4'b0000: result_o = in1_i + in2_i;
             4'b0001: result_o = in1_i & in2_i;

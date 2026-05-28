@@ -29,22 +29,28 @@ module core (
     wire id_ex_write;
     wire branch_taken;
     wire [31:0] pc_branch;
-    wire is_load_hazard;    // load hazard detection signal
 
     // stall/flush logic
-    assign pc_write    = ~stall;
-    assign if_id_write = ~stall;
-    assign id_ex_write = ~stall;
+    wire total_stall;
+    wire lsu_busy;
 
-    assign flush       = branch_taken;
-    assign flush_ex    = flush || stall; // for the id/ex pipeline, with flush on a flush or a stall
+    assign total_stall = stall || lsu_busy;
+
+    assign pc_write = branch_taken || !total_stall;
+    assign if_id_write = ~total_stall && instr_valid_if;
+
+// Let flush_ex insert bubbles into ID/EX.
+    assign id_ex_write = 1'b1;
+
+    assign flush = branch_taken;
+    assign flush_ex = flush || total_stall;
 
 
 
     wire [31:0] pc_curr_if;
     wire [31:0] pc_next;
     
-    assign pc_next     = pc_curr_if + 32'd4;
+    assign pc_next = pc_curr_if + 32'd4;
     assign imem_addr_o = pc_curr_if;
     assign imem_read_o = 1'b1;
 
@@ -56,7 +62,15 @@ module core (
         .branch_taken_i (branch_taken),
         .pc_branch_i    (pc_branch),
         
-        .pc_curr_o      (pc_curr_if)
+    .pc_curr_o      (pc_curr_if),
+
+    .stall_i        (total_stall),
+    .flush_i        (flush),
+    .imem_rd_data_i (imem_rd_data_i),
+
+    .pc_id_o        (pc_if_aligned),
+    .instr_if_aligned_o     (instr_if_aligned),
+    .instr_valid_if_o  (instr_valid_if)
     );
 
 
@@ -64,19 +78,30 @@ module core (
     wire [31:0] instr_id;
     wire [31:0] imem_data;
     
-    assign imem_data = imem_rd_data_i;
+    wire [31:0] pc_if_aligned;
+    wire [31:0] instr_if_aligned;
+    wire        instr_valid_if;
+
+
+    wire load_pending_q;
+    wire [4:0] load_rd_q;
+    wire load_reg_write_q;
+    wire [1:0] load_mem_to_reg_q;
+    wire [31:0] load_alu_result_q;
+    wire [31:0] load_imm_q;
+    wire [31:0] load_pc_q;
 
     if_id_pipeline if_id (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
-        .flush_i        (flush),
-        .if_id_write_i  (if_id_write),
+        .clk_i (clk_i),
+        .rst_ni (rst_ni),
+        .flush_i (flush),
+        .if_id_write_i (if_id_write),
         
-        .pc_curr_i      (pc_curr_if),
-        .instr_i        (imem_data),
+       .pc_curr_i (pc_if_aligned),
+        .instr_i (instr_if_aligned),
         
-        .pc_curr_o      (pc_curr_id),
-        .instr_o        (instr_id)
+        .pc_curr_o (pc_curr_id),
+        .instr_o  (instr_id)
     );
 
 
@@ -101,92 +126,89 @@ module core (
     wire        mem_write_id;
     wire [1:0]  mem_to_reg_id;
     wire        reg_write_id;
-    wire        is_load_id_pipe; // sent to id/ex pipeline
 
     core_id_stage core_ID (
-        .clk_i              (clk_i),
-        .rst_ni             (rst_ni),
-        .instr_i            (instr_id),
+        .clk_i (clk_i),
+        .rst_ni (rst_ni),
+        .instr_i (instr_id),
 
-        .rd_din_i           (rd_data_wb),
-        .wb_rd_i            (rd_addr_wb),
-        .wb_reg_write_i     (reg_write_wb),
+        .rd_din_i (rd_data_wb),
+        .wb_rd_i (rd_addr_wb),
+        .wb_reg_write_i (reg_write_wb),
 
         // for the hazard unit 
-        .rd_id_ex_i         (rd_addr_ex),
-        .is_load_i          (is_load_hazard), 
-        .is_load_pipeline_o (is_load_id_pipe),
-        .stall_o            (stall),
+        .rd_id_ex_i (rd_addr_ex),
+        .mem_read_ex (mem_read_ex), 
+        
+        .stall_o (stall),
 
-        .imm_o              (imm_id),
-        .funct3_o           (funct3_id),
-        .funct7_o           (funct7_id),
-        .opcode_o           (opcode_id),
-        .rs1_dout_o         (rs1_data_id),
-        .rs2_dout_o         (rs2_data_id),
-        .rs1_o              (rs1_addr_id),
-        .rs2_o              (rs2_addr_id),
-        .mem_read_o         (mem_read_id),
-        .mem_write_o        (mem_write_id),
-        .mem_to_reg_o       (mem_to_reg_id),
-        .rd_o               (rd_addr_id),
-        .reg_write_o        (reg_write_id)
+        .imm_o (imm_id),
+        .funct3_o (funct3_id),
+        .funct7_o (funct7_id),
+        .opcode_o (opcode_id),
+        .rs1_dout_o (rs1_data_id),
+        .rs2_dout_o (rs2_data_id),
+        .rs1_o (rs1_addr_id),
+        .rs2_o (rs2_addr_id),
+        .mem_read_o (mem_read_id),
+        .mem_write_o (mem_write_id),
+        .mem_to_reg_o (mem_to_reg_id),
+        .rd_o (rd_addr_id),
+        .reg_write_o (reg_write_id)
     );
 
 
     wire [31:0] pc_curr_ex;
-    wire        reg_write_ex;
+    wire reg_write_ex;
     wire [4:0]  rs1_addr_fwd; // for forwarding unit
     wire [4:0]  rs2_addr_fwd; // for forwarding unit
     
     wire signed [31:0] imm_ex;
-    wire [2:0]  funct3_ex;
-    wire [6:0]  funct7_ex;
-    wire [6:0]  opcode_ex;
+    wire [2:0] funct3_ex;
+    wire [6:0] funct7_ex;
+    wire [6:0] opcode_ex;
     wire signed [31:0] rs1_data_ex;
     wire signed [31:0] rs2_data_ex;
     
-    wire        mem_read_ex;
-    wire        mem_write_ex;
+    wire mem_read_ex;
+    wire mem_write_ex;
     wire [1:0]  mem_to_reg_ex;
 
     id_ex_pipeline id_ex (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
-        .flush_i        (flush_ex),
-        .id_ex_write_i  (id_ex_write),
+        .clk_i (clk_i),
+        .rst_ni (rst_ni),
+        .flush_i (flush_ex),
+        .id_ex_write_i (id_ex_write),
 
-        .rd_i           (rd_addr_id),
-        .reg_write_i    (reg_write_id),
-        .rs1_i          (rs1_addr_id),
-        .rs2_i          (rs2_addr_id),
-        .is_load_i      (is_load_id_pipe),
-        .imm_i          (imm_id),
-        .funct3_i       (funct3_id),
-        .funct7_i       (funct7_id),
-        .opcode_i       (opcode_id),
-        .rs1_dout_i     (rs1_data_id),
-        .rs2_dout_i     (rs2_data_id),
-        .mem_read_i     (mem_read_id),
-        .mem_write_i    (mem_write_id),
-        .mem_to_reg_i   (mem_to_reg_id),
-        .pc_curr_i      (pc_curr_id),
+        .rd_i (rd_addr_id),
+        .reg_write_i (reg_write_id),
+        .rs1_i (rs1_addr_id),
+        .rs2_i (rs2_addr_id),
+        .imm_i (imm_id),
+        .funct3_i (funct3_id),
+        .funct7_i (funct7_id),
+        .opcode_i (opcode_id),
+        .rs1_dout_i (rs1_data_id),
+        .rs2_dout_i (rs2_data_id),
+        .mem_read_i (mem_read_id),
+        .mem_write_i (mem_write_id),
+        .mem_to_reg_i (mem_to_reg_id),
+        .pc_curr_i (pc_curr_id),
 
-        .rd_o           (rd_addr_ex),
-        .reg_write_o    (reg_write_ex),
-        .rs1_o          (rs1_addr_fwd),
-        .rs2_o          (rs2_addr_fwd),
-        .is_load_o      (is_load_hazard), // sent back to id stage
-        .pc_curr_o      (pc_curr_ex),
-        .opcode_o       (opcode_ex),
-        .funct3_o       (funct3_ex),
-        .funct7_o       (funct7_ex),
-        .rs1_dout_o     (rs1_data_ex),
-        .rs2_dout_o     (rs2_data_ex),
-        .imm_o          (imm_ex),
-        .mem_read_o     (mem_read_ex),
-        .mem_write_o    (mem_write_ex),
-        .mem_to_reg_o   (mem_to_reg_ex)
+        .rd_o (rd_addr_ex),
+        .reg_write_o (reg_write_ex),
+        .rs1_o (rs1_addr_fwd),
+        .rs2_o (rs2_addr_fwd),
+        .pc_curr_o (pc_curr_ex),
+        .opcode_o (opcode_ex),
+        .funct3_o (funct3_ex),
+        .funct7_o (funct7_ex),
+        .rs1_dout_o (rs1_data_ex),
+        .rs2_dout_o (rs2_data_ex),
+        .imm_o (imm_ex),
+        .mem_read_o (mem_read_ex),
+        .mem_write_o (mem_write_ex),
+        .mem_to_reg_o (mem_to_reg_ex)
     );
 
     wire        alu_zero;
@@ -197,11 +219,11 @@ module core (
     wire        fwd_b_sel;
 
     branch_unit branch_u (
-        .opcode_i       (opcode_ex),
+        .opcode_i (opcode_ex),
         .funct3_i       (funct3_ex),
         .alu_zero_i     (alu_zero),
         .pc_i           (pc_curr_ex),
-        .rs1_dout_i     (rs1_data_ex),
+        .rs1_dout_i     (rs1_fwd),
         .imm_i          (imm_ex),
         .lt_flag_i      (alu_lt),
         
@@ -219,19 +241,21 @@ module core (
         .forward_b_o    (fwd_b_sel)
     );
 
+    wire signed [31:0] rs1_fwd; 
+    wire signed [31:0] rs2_fwd; 
+
+    assign rs1_fwd = (fwd_a_sel == 1'b1) ? rd_data_wb : rs1_data_ex;
+    assign rs2_fwd = (fwd_b_sel == 1'b1) ? rd_data_wb : rs2_data_ex; 
+ 
+
     core_ex_stage core_EX (
         .opcode_i       (opcode_ex),
         .funct3_i       (funct3_ex),
         .funct7_i       (funct7_ex),
-        .rs1_dout_i     (rs1_data_ex),
-        .rs2_dout_i     (rs2_data_ex),
+        .rs1_dout_i     (rs1_fwd),
+        .rs2_dout_i     (rs2_fwd),
         .imm_i          (imm_ex),
         .pc_i           (pc_curr_ex),
-        
-        // for forwarding
-        .forward_a_i    (fwd_a_sel),
-        .forward_b_i    (fwd_b_sel), 
-        .wb_data        (rd_data_wb),
 
         .lt_flag_o      (alu_lt),
         .zero_o         (alu_zero),
@@ -245,6 +269,7 @@ module core (
     wire               dmem_read_int;
     wire signed [31:0] dmem_data_from_lsu;
 
+    // connect these directly (TO DO)
     assign dmem_read_o    = dmem_read_int;
     assign dmem_addr_o    = dmem_addr_int; 
     assign dmem_wr_data_o = dmem_wr_data_int;
@@ -252,7 +277,7 @@ module core (
 
     lsu lsu_core (
         .alu_result_i   (alu_result_ex),
-        .rs2_dout_i     (rs2_data_ex),
+        .rs2_dout_i     (rs2_fwd),
         .dmem_rd_data_i (dmem_rd_data_i),
         .mem_write_i    (mem_write_ex),
         .mem_read_i     (mem_read_ex),
@@ -262,42 +287,64 @@ module core (
         .dmem_write_o   (dmem_write_int),
         .dmem_read_o    (dmem_read_int),
 
-        .dmem_rd_data_o (dmem_data_from_lsu)
+         .clk_i (clk_i),
+        .rst_ni (rst_ni),
+
+        .rd_addr_i (rd_addr_ex),
+        .reg_write_i (reg_write_ex),
+        .mem_to_reg_i (mem_to_reg_ex),
+        .imm_i (imm_ex),
+        .pc_i (pc_curr_ex),
+
+        .lsu_busy_o (lsu_busy),
+
+        // result of muxes
+        .load_rd_o (load_rd_q),
+        .load_reg_write_o (load_reg_write_q),
+        .load_mem_to_reg_o (load_mem_to_reg_q),
+        .load_alu_result_o (load_alu_result_q),
+        .load_imm_o (load_imm_q),
+        .load_pc_o (load_pc_q),
+        .load_dmem_o (dmem_data_from_lsu)
     );
 
-
-    wire [1:0]          mem_to_reg_wb;
+    wire [1:0] mem_to_reg_wb;
     wire signed [31:0]  alu_result_wb;
     wire signed [31:0]  imm_wb;
-    wire [31:0]         pc_curr_wb;
+    wire [31:0] pc_curr_wb;
+
 
     ex_wb_pipeline ex_wb(
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
 
-        .mem_to_reg_i   (mem_to_reg_ex),
-        .alu_result_i   (alu_result_ex),
-        .imm_i          (imm_ex),
-        .rd_i           (rd_addr_ex),
-        .reg_write_i    (reg_write_ex),
-        .pc_curr_i      (pc_curr_ex),
+    .mem_to_reg_i   (load_mem_to_reg_q),
+    .alu_result_i   (load_alu_result_q),
+    .imm_i          (load_imm_q),
+    .rd_i           (load_rd_q),
+    .reg_write_i    (load_reg_write_q),
+    .pc_curr_i      (load_pc_q),
 
-        .mem_to_reg_o   (mem_to_reg_wb),
-        .alu_result_o   (alu_result_wb),
-        .imm_o          (imm_wb),
-        .rd_o           (rd_addr_wb),
-        .reg_write_o    (reg_write_wb),
-        .pc_curr_o      (pc_curr_wb)
-    );
+    .dmem_i         (dmem_data_from_lsu),
+    .dmem_o         (dmem_data_wb),
+
+    .mem_to_reg_o   (mem_to_reg_wb),
+    .alu_result_o   (alu_result_wb),
+    .imm_o          (imm_wb),
+    .rd_o           (rd_addr_wb),
+    .reg_write_o    (reg_write_wb),
+    .pc_curr_o      (pc_curr_wb)
+);
+    wire signed [31:0] dmem_data_wb;
 
     core_wb_stage core_WB (
-        .alu_result_i   (alu_result_wb),
-        .mem_to_reg_i   (mem_to_reg_wb),
-        .dmem_rd_data_i (dmem_data_from_lsu),
-        .pc_plus_4_i    (pc_curr_wb),
-        .imm_i          (imm_wb),
+    .alu_result_i   (alu_result_wb),
+    .mem_to_reg_i   (mem_to_reg_wb),
+    .dmem_rd_data_i (dmem_data_wb),
+    .pc_plus_4_i    (pc_curr_wb + 32'd4),
+    .imm_i          (imm_wb),
 
-        .rd_din_o       (rd_data_wb) // sent back to id stage
-    );
+    .rd_din_o       (rd_data_wb)
+);
 
 endmodule

@@ -1,0 +1,12 @@
+export DESIGN_NICKNAME = riscv-core
+export DESIGN_NAME = riscv-core
+
+export PLATFORM = sky130hd
+
+export VERILOG_FILES = $(sort $(wildcard $~/riscv-core/*.v))
+
+export SDC_FILE = $~/(DESIGN_NICKNAME)/constraint.sdc
+
+export CORE_UTILIZATION = 45
+export PLACE_DENSITY_LB_ADDON = 0.2
+export REMOVE_ABC_BUFFERS = 1
